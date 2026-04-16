@@ -444,8 +444,15 @@ async function loadPdf() {
       const widgets = field.acroField.getWidgets();
 
       let type = 'text';
-      if (field instanceof PDFLib.PDFCheckBox) type = 'checkbox';
-      else if (field instanceof PDFLib.PDFRadioGroup) type = 'radio';
+      const ft = field.acroField.getFieldType();
+      const ftName = ft ? ft.asString() : '';
+      if (ftName === '/Btn') {
+        const flags = field.acroField.getFlags();
+        const isRadio = !!(flags & (1 << 15));       // bit 16 (0-indexed 15) = Radio
+        const isPushbutton = !!(flags & (1 << 16));  // bit 17 (0-indexed 16) = Pushbutton
+        if (isRadio && !isPushbutton) type = 'radio';
+        else if (!isPushbutton) type = 'checkbox';
+      }
 
       widgets.forEach((widget, wIdx) => {
         const rect = widget.getRectangle();
