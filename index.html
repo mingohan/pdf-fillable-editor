@@ -945,7 +945,11 @@ document.getElementById('downloadBtn').onclick = async () => {
     });
   }
 
-  // Step 5: Save and download
+  // Step 5: Mark NeedsAppearances so the PDF viewer generates its own appearance
+  // instead of using pdf-lib's built-in appearance stream (which draws oversized circles)
+  form.acroForm.dict.set(PDFLib.PDFName.of('NeedsAppearances'), PDFLib.PDFBool.True);
+
+  // Step 6: Save and download
   const bytes = await doc.save();
   const blob = new Blob([bytes], { type: 'application/pdf' });
   const url = URL.createObjectURL(blob);
