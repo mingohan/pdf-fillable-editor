@@ -507,7 +507,7 @@ async function loadPdf() {
     canvas.width = viewport.width;
     canvas.height = viewport.height;
     container.appendChild(canvas);
-    await page.render({ canvasContext: canvas.getContext('2d'), viewport }).promise;
+    await page.render({ canvasContext: canvas.getContext('2d'), viewport, renderInteractiveForms: false }).promise;
 
     const overlay = document.createElement('div');
     overlay.className = 'overlay';
