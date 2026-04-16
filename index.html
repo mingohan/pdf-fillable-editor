@@ -889,31 +889,25 @@ document.getElementById('downloadBtn').onclick = async () => {
     }
   });
 
-  // Step 4: Create new fields (allow duplicate names)
-  // Strategy: create each field with a unique internal name first (to keep pdf-lib happy),
-  // then rename to the user's desired name after creation. This avoids pdf-lib's
-  // name-conflict recursion while producing same-named fields in the output PDF.
+  // Step 4: Create new fields
   const newFields = state.fields.filter(f => f.origin === 'new');
-  const renameQueue = []; // { field, desiredName }
 
   // Text fields
   newFields.filter(f => f.type === 'text').forEach(f => {
     const page = pages[f.page];
     const ph = page.getHeight();
-    const internalName = uniqueName(form, f.name);
-    const tf = form.createTextField(internalName);
+    const name = uniqueName(form, f.name);
+    const tf = form.createTextField(name);
     tf.addToPage(page, { x: f.x, y: ph - f.y - f.h, width: f.w, height: f.h, borderWidth: 1 });
-    renameQueue.push({ field: tf, desiredName: f.name });
   });
 
   // Checkboxes
   newFields.filter(f => f.type === 'checkbox').forEach(f => {
     const page = pages[f.page];
     const ph = page.getHeight();
-    const internalName = uniqueName(form, f.name);
-    const cb = form.createCheckBox(internalName);
+    const name = uniqueName(form, f.name);
+    const cb = form.createCheckBox(name);
     cb.addToPage(page, { x: f.x, y: ph - f.y - f.h, width: f.w, height: f.h });
-    renameQueue.push({ field: cb, desiredName: f.name });
   });
 
   // Radio groups
@@ -923,21 +917,15 @@ document.getElementById('downloadBtn').onclick = async () => {
     (newRadioGroups[g] = newRadioGroups[g] || []).push(f);
   });
   for (const [groupName, items] of Object.entries(newRadioGroups)) {
-    const internalGroupName = uniqueName(form, groupName);
-    const rg = form.createRadioGroup(internalGroupName);
+    const name = uniqueName(form, groupName);
+    const rg = form.createRadioGroup(name);
     items.forEach((f, idx) => {
       const page = pages[f.page];
       const ph = page.getHeight();
       const optionName = f.name.replace(/[^A-Za-z0-9_]/g, '_') || `opt${idx + 1}`;
       rg.addOptionToPage(optionName, page, { x: f.x, y: ph - f.y - f.h, width: f.w, height: f.h });
     });
-    renameQueue.push({ field: rg, desiredName: groupName });
   }
-
-  // Step 4.5: Rename all new fields to their desired names (allowing duplicates)
-  renameQueue.forEach(({ field, desiredName }) => {
-    field.acroField.setPartialName(desiredName);
-  });
 
   // Step 5: Save and download
   const bytes = await doc.save();
