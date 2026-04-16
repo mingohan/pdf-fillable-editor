@@ -441,12 +441,11 @@ async function loadPdf() {
   if (form) {
     for (const field of form.getFields()) {
       const name = field.getName();
-      const typeName = field.constructor.name;
       const widgets = field.acroField.getWidgets();
 
       let type = 'text';
-      if (typeName === 'PDFCheckBox') type = 'checkbox';
-      else if (typeName === 'PDFRadioGroup') type = 'radio';
+      if (field instanceof PDFLib.PDFCheckBox) type = 'checkbox';
+      else if (field instanceof PDFLib.PDFRadioGroup) type = 'radio';
 
       widgets.forEach((widget, wIdx) => {
         const rect = widget.getRectangle();
