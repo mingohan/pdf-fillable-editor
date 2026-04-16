@@ -945,8 +945,14 @@ document.getElementById('downloadBtn').onclick = async () => {
     });
   }
 
-  // Step 5: Mark NeedsAppearances so the PDF viewer generates its own appearance
-  // instead of using pdf-lib's built-in appearance stream (which draws oversized circles)
+  // Step 5: Strip appearance streams (/AP) from all widgets so the viewer
+  // generates its own standard appearance instead of pdf-lib's oversized circles
+  const apKey = PDFLib.PDFName.of('AP');
+  for (const field of form.getFields()) {
+    for (const widget of field.acroField.getWidgets()) {
+      widget.dict.delete(apKey);
+    }
+  }
   form.acroForm.dict.set(PDFLib.PDFName.of('NeedsAppearances'), PDFLib.PDFBool.True);
 
   // Step 6: Save and download
