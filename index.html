@@ -915,7 +915,12 @@ document.getElementById('downloadBtn').onclick = async () => {
     const ph = page.getHeight();
     const name = uniqueName(form, f.name);
     const cb = form.createCheckBox(name);
-    cb.addToPage(page, { x: f.x, y: ph - f.y - f.h, width: f.w, height: f.h });
+    cb.addToPage(page, {
+      x: f.x, y: ph - f.y - f.h, width: f.w, height: f.h,
+      borderWidth: 1,
+      borderColor: PDFLib.rgb(0, 0, 0),
+      backgroundColor: PDFLib.rgb(1, 1, 1),
+    });
   });
 
   // Radio groups
@@ -931,7 +936,12 @@ document.getElementById('downloadBtn').onclick = async () => {
       const page = pages[f.page];
       const ph = page.getHeight();
       const optionName = f.name.replace(/[^A-Za-z0-9_]/g, '_') || `opt${idx + 1}`;
-      rg.addOptionToPage(optionName, page, { x: f.x, y: ph - f.y - f.h, width: f.w, height: f.h });
+      rg.addOptionToPage(optionName, page, {
+        x: f.x, y: ph - f.y - f.h, width: f.w, height: f.h,
+        borderWidth: 1,
+        borderColor: PDFLib.rgb(0, 0, 0),
+        backgroundColor: PDFLib.rgb(1, 1, 1),
+      });
     });
   }
 
