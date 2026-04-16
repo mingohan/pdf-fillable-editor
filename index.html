@@ -444,15 +444,17 @@ async function loadPdf() {
       const widgets = field.acroField.getWidgets();
 
       let type = 'text';
-      const ft = field.acroField.getFieldType();
-      const ftName = ft ? ft.asString() : '';
-      if (ftName === '/Btn') {
-        const flags = field.acroField.getFlags();
-        const isRadio = !!(flags & (1 << 15));       // bit 16 (0-indexed 15) = Radio
-        const isPushbutton = !!(flags & (1 << 16));  // bit 17 (0-indexed 16) = Pushbutton
-        if (isRadio && !isPushbutton) type = 'radio';
-        else if (!isPushbutton) type = 'checkbox';
-      }
+      try {
+        const ftObj = field.acroField.dict.get(PDFLib.PDFName.of('FT'));
+        const ftName = ftObj ? ftObj.asString() : '';
+        if (ftName === '/Btn') {
+          const flags = field.acroField.getFlags();
+          const isRadio = !!(flags & (1 << 15));
+          const isPushbutton = !!(flags & (1 << 16));
+          if (isRadio && !isPushbutton) type = 'radio';
+          else if (!isPushbutton) type = 'checkbox';
+        }
+      } catch (e) { /* fallback to text */ }
 
       widgets.forEach((widget, wIdx) => {
         const rect = widget.getRectangle();
