@@ -1,0 +1,978 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title data-i18n="title">PDF 表單欄位編輯器</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: -apple-system, "Segoe UI", Roboto, sans-serif; display: flex; height: 100vh; background: #e8e8ec; }
+
+/* Sidebar */
+#sidebar {
+  width: 340px; min-width: 340px; background: #f6f6f8; border-right: 1px solid #d0d0d5;
+  display: flex; flex-direction: column; overflow: hidden;
+}
+#sidebar-fixed { padding: 16px 16px 0; flex-shrink: 0; }
+.lang-toggle {
+  float: right; display: inline-flex; align-items: center; gap: 5px;
+  padding: 4px 10px 4px 7px; border: 1px solid #d0d0d5; border-radius: 6px;
+  background: #fff; font-size: 12px; font-weight: 500; cursor: pointer; color: #555;
+  transition: all .2s; box-shadow: 0 1px 2px rgba(0,0,0,.06);
+}
+.lang-toggle svg { flex-shrink: 0; }
+.lang-toggle:hover { background: #f0f4ff; border-color: #2563eb; color: #2563eb; box-shadow: 0 1px 4px rgba(37,99,235,.15); }
+.lang-toggle:active { transform: scale(.97); }
+#sidebar-scroll { flex: 1; overflow-y: auto; padding: 0 16px 16px; }
+h2 { font-size: 13px; color: #555; margin: 16px 0 6px; text-transform: uppercase; letter-spacing: .5px; }
+h2:first-child { margin-top: 0; }
+
+/* Upload */
+.upload-area {
+  border: 2px dashed #bbb; border-radius: 8px; padding: 20px; text-align: center;
+  cursor: pointer; transition: border-color .2s, background .2s; color: #777; font-size: 13px;
+}
+.upload-area:hover { border-color: #2563eb; background: #eff4ff; color: #2563eb; }
+.upload-area input[type=file] { display: none; }
+
+/* Toolbar buttons */
+.toolbar { display: flex; gap: 4px; flex-wrap: wrap; margin-bottom: 4px; }
+.toolbar button {
+  padding: 6px 12px; border: 1px solid #ccc; border-radius: 6px; background: #fff;
+  font-size: 13px; cursor: pointer; transition: all .15s;
+  display: inline-flex; align-items: center; gap: 5px;
+}
+.toolbar button svg { flex-shrink: 0; }
+.toolbar button:hover { background: #eef; border-color: #88a; }
+.toolbar button.active { background: #2563eb; color: #fff; border-color: #2563eb; }
+
+#radioGroupRow { margin-top: 6px; display: none; }
+#radioGroupRow label { font-size: 12px; color: #555; display: flex; align-items: center; gap: 4px; }
+#radioGroupRow input { flex: 1; padding: 4px 6px; font-size: 12px; border: 1px solid #ccc; border-radius: 4px; }
+
+/* Undo/Redo */
+.undo-redo { display: flex; gap: 4px; margin-top: 4px; }
+.undo-redo button {
+  padding: 5px 10px; border: 1px solid #ccc; border-radius: 6px; background: #fff;
+  font-size: 13px; cursor: pointer; transition: all .15s;
+}
+.undo-redo button:hover:not(:disabled) { background: #eef; }
+.undo-redo button:disabled { opacity: .4; cursor: default; }
+.undo-redo button .shortcut { font-size: 10px; color: #999; margin-left: 2px; }
+
+.download-btn {
+  display: block; width: 100%; padding: 10px; border: none; border-radius: 8px;
+  background: #16a34a; color: #fff; font-size: 14px; font-weight: 600; cursor: pointer;
+  transition: background .15s; margin-top: 12px;
+}
+.download-btn:hover { background: #15803d; }
+.download-btn:disabled { background: #aaa; cursor: not-allowed; }
+
+/* Field list */
+.field-list { margin-top: 4px; }
+.field-row {
+  background: #fff; border: 1px solid #dde; border-radius: 6px; padding: 8px;
+  margin-bottom: 6px; font-size: 12px; transition: border-color .15s;
+}
+.field-row:hover { border-color: #2563eb; }
+.field-row.selected-row { border-color: #2563eb; background: #f0f4ff; }
+.field-row .meta { color: #777; font-size: 11px; margin-bottom: 4px; }
+.field-row .meta .badge {
+  display: inline-block; padding: 1px 5px; border-radius: 3px; font-size: 10px; font-weight: 600;
+}
+.badge.text { background: #dbeafe; color: #1d4ed8; }
+.badge.checkbox { background: #dcfce7; color: #166534; }
+.badge.radio { background: #fef3c7; color: #92400e; }
+.badge.existing { background: #f0f0f0; color: #555; }
+.badge.new { background: #e0e7ff; color: #3730a3; }
+.field-row input[type=text] {
+  width: 100%; padding: 4px 6px; font-size: 12px; border: 1px solid #ccc; border-radius: 4px;
+  margin-top: 3px;
+}
+.field-row input[type=text]:focus { outline: none; border-color: #2563eb; }
+.field-row .actions { display: flex; gap: 4px; margin-top: 4px; }
+.field-row .actions button {
+  padding: 2px 8px; font-size: 11px; border-radius: 4px; border: 1px solid #ccc;
+  background: #f8f8f8; cursor: pointer;
+}
+.field-row .actions .del-btn { color: #dc2626; border-color: #fca5a5; }
+.field-row .actions .del-btn:hover { background: #fee2e2; }
+
+.stats { padding: 8px 0; font-size: 11px; color: #999; }
+
+/* Main area */
+#main { flex: 1; overflow: auto; padding: 20px; position: relative; }
+.empty-state {
+  display: flex; align-items: center; justify-content: center; height: 100%;
+  color: #aaa; font-size: 18px;
+}
+
+/* Page containers */
+.page-container {
+  position: relative; margin: 0 auto 20px; box-shadow: 0 2px 12px rgba(0,0,0,.25);
+  background: #fff;
+}
+.page-container canvas { display: block; }
+.overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; cursor: default; }
+.overlay.drawing-mode { cursor: crosshair; }
+
+/* Field boxes on PDF */
+.field-box {
+  position: absolute; border: 2px solid #2563eb; background: rgba(37,99,235,.12);
+  cursor: move; font-size: 11px; color: #1e3a8a; padding: 1px 3px;
+  overflow: visible; transition: outline .1s; display: flex; align-items: center; gap: 2px;
+}
+.field-box.checkbox { border-color: #16a34a; background: rgba(22,163,74,.12); color: #166534; }
+.field-box.radio { border-color: #ea580c; background: rgba(234,88,12,.12); color: #9a3412; }
+.field-box.selected { outline: 2px dashed #111; outline-offset: 1px; z-index: 5; }
+.field-box .handle {
+  position: absolute; right: -4px; bottom: -4px; width: 8px; height: 8px;
+  background: #333; cursor: nwse-resize; border-radius: 1px;
+}
+
+/* Field type icons inside the box */
+.field-icon {
+  flex-shrink: 0; width: 12px; height: 12px; border: 2px solid currentColor;
+  display: inline-block; vertical-align: middle; pointer-events: none;
+}
+.field-icon.icon-checkbox { border-radius: 2px; }
+.field-icon.icon-radio { border-radius: 50%; }
+
+.field-name-text {
+  white-space: nowrap; text-overflow: ellipsis; overflow: hidden; flex: 1;
+  min-width: 0; cursor: text;
+}
+
+/* Inline name editor on PDF */
+.inline-name-input {
+  position: absolute; z-index: 100; border: 2px solid #2563eb; border-radius: 3px;
+  font-size: 12px; padding: 2px 4px; background: #fff; color: #000; outline: none;
+  min-width: 60px;
+}
+
+/* Drawing preview */
+.drawing { position: absolute; border: 2px dashed #2563eb; background: rgba(37,99,235,.08); pointer-events: none; }
+
+/* Toast */
+.toast {
+  position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%);
+  background: #333; color: #fff; padding: 10px 20px; border-radius: 8px;
+  font-size: 13px; z-index: 999; opacity: 0; transition: opacity .3s;
+}
+.toast.show { opacity: 1; }
+</style>
+</head>
+<body>
+
+<div id="sidebar">
+  <div id="sidebar-fixed">
+    <div style="display:flex;align-items:center;justify-content:space-between;">
+      <h2 data-i18n="upload" style="margin-top:0">載入 PDF</h2>
+      <button class="lang-toggle" id="langToggle" title="Switch language"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10A15.3 15.3 0 0 1 12 2z"/></svg> <span id="langToggleText">EN</span></button>
+    </div>
+    <div style="height:16px"></div>
+    <div class="upload-area" id="uploadArea">
+      <span data-i18n="uploadHint">點擊或拖曳 PDF 檔案至此</span>
+      <input type="file" id="fileInput" accept="application/pdf" />
+    </div>
+
+    <h2 data-i18n="addField">新增欄位</h2>
+    <div class="toolbar">
+      <button data-tool="text"><svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M3 3h8M7 3v9"/></svg> <span data-i18n="toolText">Text Field</span></button>
+      <button data-tool="checkbox"><svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="2" y="2" width="10" height="10" rx="2"/></svg> <span data-i18n="toolCheckbox">Check Box</span></button>
+      <button data-tool="radio"><svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="7" cy="7" r="5"/></svg> <span data-i18n="toolRadio">Radio Button</span></button>
+    </div>
+    <div id="radioGroupRow">
+      <label><span data-i18n="radioGroupName">Radio group name：</span><input type="text" id="radioGroupName" value="group1" /></label>
+    </div>
+
+    <h2 data-i18n="edit">編輯</h2>
+    <div class="undo-redo">
+      <button id="undoBtn" disabled>↩ <span data-i18n="undo">復原</span><span class="shortcut">⌘Z</span></button>
+      <button id="redoBtn" disabled>↪ <span data-i18n="redo">重做</span><span class="shortcut">⌘⇧Z</span></button>
+    </div>
+    <button class="download-btn" id="downloadBtn" disabled><span data-i18n="downloadBtn">下載修改後的 PDF (⌘S)</span></button>
+    <h2><span data-i18n="fieldList">欄位清單</span> <span id="stats" class="stats"></span></h2>
+  </div>
+
+  <div id="sidebar-scroll">
+    <div id="fieldList" class="field-list"></div>
+  </div>
+</div>
+
+<div id="main">
+  <div class="empty-state" id="emptyState" data-i18n="emptyState">請上傳 PDF 檔案開始編輯</div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="https://unpkg.com/pdf-lib@1.17.1/dist/pdf-lib.min.js"></script>
+<script>
+pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
+
+// ─── State ───────────────────────────────────────────────────────────
+const state = {
+  pdfBytes: null,
+  pdfJsDoc: null,
+  pageViewports: [],
+  fields: [],
+  tool: null,          // null = select mode, 'text'|'checkbox'|'radio' = drawing mode
+  selectedId: null,
+  scale: 1.5,
+  history: [],         // snapshots of fields for undo
+  historyIndex: -1,    // current position in history
+};
+
+let nextId = 1;
+const uid = () => 'f' + (nextId++);
+
+// ─── i18n ─────────────────────────────────────────────────────────────
+let currentLang = 'zh-Hant';
+
+const i18n = {
+  'zh-Hant': {
+    title: 'PDF 表單欄位編輯器',
+    upload: '載入 PDF',
+    uploadHint: '點擊或拖曳 PDF 檔案至此',
+    addField: '新增欄位',
+    toolText: 'Text Field',
+    toolCheckbox: 'Check Box',
+    toolRadio: 'Radio Button',
+    radioGroupName: 'Radio group name：',
+    edit: '編輯',
+    undo: '復原',
+    redo: '重做',
+    downloadBtn: '下載修改後的 PDF (⌘S)',
+    fieldList: '欄位清單',
+    emptyState: '請上傳 PDF 檔案開始編輯',
+    statsFormat: '（既有 {existing} / 新增 {new}）',
+    existing: '既有',
+    newField: '新增',
+    delete: '刪除',
+    fieldNamePlaceholder: '欄位名稱',
+    radioGroupPlaceholder: '群組名稱',
+    toastLoaded: '已載入：',
+    toastUploadFirst: '請先上傳 PDF',
+    toastDownloaded: 'PDF 已下載',
+    page: '第',
+    pageSuffix: '頁',
+    langToggleLabel: 'EN',
+  },
+  'en': {
+    title: 'PDF Form Field Editor',
+    upload: 'Load PDF',
+    uploadHint: 'Click or drag a PDF file here',
+    addField: 'Add Field',
+    toolText: 'Text Field',
+    toolCheckbox: 'Check Box',
+    toolRadio: 'Radio Button',
+    radioGroupName: 'Radio group name: ',
+    edit: 'Edit',
+    undo: 'Undo',
+    redo: 'Redo',
+    downloadBtn: 'Download Modified PDF (⌘S)',
+    fieldList: 'Field List',
+    emptyState: 'Upload a PDF file to start editing',
+    statsFormat: '(Existing {existing} / New {new})',
+    existing: 'Existing',
+    newField: 'New',
+    delete: 'Delete',
+    fieldNamePlaceholder: 'Field name',
+    radioGroupPlaceholder: 'Group name',
+    toastLoaded: 'Loaded: ',
+    toastUploadFirst: 'Please upload a PDF first',
+    toastDownloaded: 'PDF downloaded',
+    page: 'Page ',
+    pageSuffix: '',
+    langToggleLabel: '繁體中文',
+  },
+};
+
+function t(key) {
+  return (i18n[currentLang] && i18n[currentLang][key]) || key;
+}
+
+function setLang(lang) {
+  currentLang = lang;
+  document.documentElement.lang = lang === 'zh-Hant' ? 'zh-Hant' : 'en';
+  document.querySelectorAll('[data-i18n]').forEach(el => {
+    const key = el.getAttribute('data-i18n');
+    if (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA') {
+      el.placeholder = t(key);
+    } else {
+      el.textContent = t(key);
+    }
+  });
+  document.title = t('title');
+  document.getElementById('langToggleText').textContent = t('langToggleLabel');
+  renderList();
+}
+
+document.getElementById('langToggle').onclick = () => {
+  setLang(currentLang === 'zh-Hant' ? 'en' : 'zh-Hant');
+};
+
+// ─── Undo / Redo ─────────────────────────────────────────────────────
+function deepCloneFields() {
+  return JSON.parse(JSON.stringify(state.fields));
+}
+
+function pushHistory() {
+  // Discard any redo states ahead of current position
+  state.history = state.history.slice(0, state.historyIndex + 1);
+  state.history.push(deepCloneFields());
+  state.historyIndex = state.history.length - 1;
+  // Limit history size
+  if (state.history.length > 50) {
+    state.history.shift();
+    state.historyIndex--;
+  }
+  updateUndoRedoButtons();
+}
+
+function undo() {
+  if (state.historyIndex <= 0) return;
+  state.historyIndex--;
+  state.fields = JSON.parse(JSON.stringify(state.history[state.historyIndex]));
+  state.selectedId = null;
+  renderFields();
+  renderList();
+  updateUndoRedoButtons();
+}
+
+function redo() {
+  if (state.historyIndex >= state.history.length - 1) return;
+  state.historyIndex++;
+  state.fields = JSON.parse(JSON.stringify(state.history[state.historyIndex]));
+  state.selectedId = null;
+  renderFields();
+  renderList();
+  updateUndoRedoButtons();
+}
+
+function updateUndoRedoButtons() {
+  document.getElementById('undoBtn').disabled = state.historyIndex <= 0;
+  document.getElementById('redoBtn').disabled = state.historyIndex >= state.history.length - 1;
+}
+
+document.getElementById('undoBtn').onclick = undo;
+document.getElementById('redoBtn').onclick = redo;
+
+// Cmd+Z / Cmd+Shift+Z / Cmd+S
+document.addEventListener('keydown', e => {
+  if ((e.metaKey || e.ctrlKey) && e.key === 'z' && !e.shiftKey) {
+    e.preventDefault();
+    undo();
+  } else if ((e.metaKey || e.ctrlKey) && (e.key === 'Z' || (e.key === 'z' && e.shiftKey))) {
+    e.preventDefault();
+    redo();
+  } else if ((e.metaKey || e.ctrlKey) && e.key === 's') {
+    e.preventDefault();
+    document.getElementById('downloadBtn').click();
+  }
+});
+
+// ─── Tool Selection ──────────────────────────────────────────────────
+document.querySelectorAll('[data-tool]').forEach(btn => {
+  btn.onclick = () => {
+    // Toggle: click same tool again to deselect
+    if (state.tool === btn.dataset.tool) {
+      state.tool = null;
+      btn.classList.remove('active');
+    } else {
+      state.tool = btn.dataset.tool;
+      document.querySelectorAll('[data-tool]').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+    }
+    document.getElementById('radioGroupRow').style.display = state.tool === 'radio' ? 'block' : 'none';
+    updateOverlayCursors();
+  };
+});
+
+function updateOverlayCursors() {
+  document.querySelectorAll('.overlay').forEach(o => {
+    o.classList.toggle('drawing-mode', state.tool !== null);
+  });
+}
+
+// ─── File Upload ─────────────────────────────────────────────────────
+const uploadArea = document.getElementById('uploadArea');
+const fileInput = document.getElementById('fileInput');
+
+uploadArea.onclick = () => fileInput.click();
+uploadArea.ondragover = e => { e.preventDefault(); uploadArea.style.borderColor = '#2563eb'; };
+uploadArea.ondragleave = () => { uploadArea.style.borderColor = ''; };
+uploadArea.ondrop = e => {
+  e.preventDefault();
+  uploadArea.style.borderColor = '';
+  const file = e.dataTransfer.files[0];
+  if (file && file.type === 'application/pdf') handleFile(file);
+};
+
+fileInput.onchange = e => {
+  const file = e.target.files[0];
+  if (file) handleFile(file);
+};
+
+async function handleFile(file) {
+  state.pdfBytes = await file.arrayBuffer();
+  await loadPdf();
+  showToast(`${t('toastLoaded')}${file.name}`);
+}
+
+// ─── Load PDF ────────────────────────────────────────────────────────
+async function loadPdf() {
+  state.fields = [];
+  state.pageViewports = [];
+  state.selectedId = null;
+  state.history = [];
+  state.historyIndex = -1;
+
+  const main = document.getElementById('main');
+  main.innerHTML = '';
+
+  // 1. Extract existing form fields with pdf-lib
+  const existingDoc = await PDFLib.PDFDocument.load(state.pdfBytes);
+  let form;
+  try { form = existingDoc.getForm(); } catch { form = null; }
+  const pdfLibPages = existingDoc.getPages();
+
+  if (form) {
+    for (const field of form.getFields()) {
+      const name = field.getName();
+      const typeName = field.constructor.name;
+      const widgets = field.acroField.getWidgets();
+
+      let type = 'text';
+      if (typeName === 'PDFCheckBox') type = 'checkbox';
+      else if (typeName === 'PDFRadioGroup') type = 'radio';
+
+      widgets.forEach((widget, wIdx) => {
+        const rect = widget.getRectangle();
+        let pageIdx = pdfLibPages.findIndex(p => p.ref === widget.P());
+        if (pageIdx < 0) {
+          for (let i = 0; i < pdfLibPages.length; i++) {
+            const annots = pdfLibPages[i].node.Annots();
+            if (annots && annots.asArray().some(r => r === widget.ref)) { pageIdx = i; break; }
+          }
+        }
+        if (pageIdx < 0) pageIdx = 0;
+        const pageHeight = pdfLibPages[pageIdx].getHeight();
+
+        const displayName = type === 'radio' ? `${name}#${wIdx}` : name;
+
+        state.fields.push({
+          id: uid(),
+          type,
+          name: displayName,
+          originalName: displayName,
+          radioGroup: type === 'radio' ? name : undefined,
+          originalRadioGroup: type === 'radio' ? name : undefined,
+          page: pageIdx,
+          x: rect.x,
+          y: pageHeight - rect.y - rect.height,
+          w: rect.width,
+          h: rect.height,
+          originalX: rect.x,
+          originalY: pageHeight - rect.y - rect.height,
+          originalW: rect.width,
+          originalH: rect.height,
+          widgetIndex: wIdx,
+          origin: 'existing',
+          deleted: false,
+        });
+      });
+    }
+  }
+
+  // 2. Render pages with pdf.js
+  state.pdfJsDoc = await pdfjsLib.getDocument({ data: state.pdfBytes.slice(0) }).promise;
+  for (let p = 1; p <= state.pdfJsDoc.numPages; p++) {
+    const page = await state.pdfJsDoc.getPage(p);
+    const viewport = page.getViewport({ scale: state.scale });
+    const container = document.createElement('div');
+    container.className = 'page-container';
+    container.style.width = viewport.width + 'px';
+    container.style.height = viewport.height + 'px';
+    container.dataset.page = p - 1;
+
+    const canvas = document.createElement('canvas');
+    canvas.width = viewport.width;
+    canvas.height = viewport.height;
+    container.appendChild(canvas);
+    await page.render({ canvasContext: canvas.getContext('2d'), viewport }).promise;
+
+    const overlay = document.createElement('div');
+    overlay.className = 'overlay';
+    container.appendChild(overlay);
+    attachDrawHandlers(overlay, p - 1);
+
+    main.appendChild(container);
+    state.pageViewports.push({
+      width: viewport.width,
+      height: viewport.height,
+      scale: state.scale,
+      pdfHeight: viewport.viewBox[3],
+    });
+  }
+
+  // Initial history snapshot
+  pushHistory();
+  renderFields();
+  renderList();
+  document.getElementById('downloadBtn').disabled = false;
+}
+
+// ─── Drawing (new fields) ────────────────────────────────────────────
+function attachDrawHandlers(overlay, pageIdx) {
+  let start = null, drawEl = null;
+
+  overlay.addEventListener('mousedown', e => {
+    if (state.tool === null) return; // select mode, don't draw
+    if (e.target !== overlay) return;
+    e.preventDefault();
+    const rect = overlay.getBoundingClientRect();
+    start = { x: e.clientX - rect.left, y: e.clientY - rect.top };
+    drawEl = document.createElement('div');
+    drawEl.className = 'drawing';
+    drawEl.style.left = start.x + 'px';
+    drawEl.style.top = start.y + 'px';
+    overlay.appendChild(drawEl);
+  });
+
+  overlay.addEventListener('mousemove', e => {
+    if (!start) return;
+    const rect = overlay.getBoundingClientRect();
+    const cx = e.clientX - rect.left, cy = e.clientY - rect.top;
+    drawEl.style.left = Math.min(start.x, cx) + 'px';
+    drawEl.style.top = Math.min(start.y, cy) + 'px';
+    drawEl.style.width = Math.abs(cx - start.x) + 'px';
+    drawEl.style.height = Math.abs(cy - start.y) + 'px';
+  });
+
+  overlay.addEventListener('mouseup', e => {
+    if (!start) return;
+    const rect = overlay.getBoundingClientRect();
+    const cx = e.clientX - rect.left, cy = e.clientY - rect.top;
+    const x = Math.min(start.x, cx), y = Math.min(start.y, cy);
+    const w = Math.abs(cx - start.x), h = Math.abs(cy - start.y);
+    drawEl.remove();
+    drawEl = null;
+    start = null;
+    if (w < 5 || h < 5) return;
+
+    const vp = state.pageViewports[pageIdx];
+    const s = vp.scale;
+    const newField = {
+      id: uid(),
+      type: state.tool,
+      name: suggestName(state.tool),
+      originalName: null,
+      radioGroup: state.tool === 'radio' ? (document.getElementById('radioGroupName').value || 'group1') : undefined,
+      originalRadioGroup: undefined,
+      page: pageIdx,
+      x: x / s,
+      y: y / s,
+      w: w / s,
+      h: h / s,
+      originalX: null,
+      originalY: null,
+      originalW: null,
+      originalH: null,
+      widgetIndex: null,
+      origin: 'new',
+      deleted: false,
+    };
+    state.fields.push(newField);
+    state.selectedId = newField.id;
+    pushHistory();
+    renderFields();
+    renderList();
+
+    // Auto-switch back to select mode after drawing
+    state.tool = null;
+    document.querySelectorAll('[data-tool]').forEach(b => b.classList.remove('active'));
+    updateOverlayCursors();
+  });
+}
+
+function suggestName(type) {
+  const prefix = { text: 'text', checkbox: 'check', radio: 'radio' }[type];
+  let n = 1;
+  while (state.fields.some(f => f.name === `${prefix}${n}`)) n++;
+  return `${prefix}${n}`;
+}
+
+// ─── Render Field Overlays ────────────────────────────────────────────
+function renderFields() {
+  document.querySelectorAll('.overlay').forEach(overlay => {
+    overlay.querySelectorAll('.field-box').forEach(b => b.remove());
+  });
+
+  const overlays = document.querySelectorAll('.overlay');
+  state.fields.forEach(f => {
+    if (f.deleted) return;
+    const overlay = overlays[f.page];
+    if (!overlay) return;
+    const vp = state.pageViewports[f.page];
+    const s = vp.scale;
+
+    const box = document.createElement('div');
+    box.className = `field-box ${f.type}` + (state.selectedId === f.id ? ' selected' : '');
+    box.style.left = f.x * s + 'px';
+    box.style.top = f.y * s + 'px';
+    box.style.width = f.w * s + 'px';
+    box.style.height = f.h * s + 'px';
+    box.dataset.id = f.id;
+
+    // Type icon
+    const icon = document.createElement('span');
+    icon.className = 'field-icon ' + (f.type === 'checkbox' ? 'icon-checkbox' : f.type === 'radio' ? 'icon-radio' : '');
+    if (f.type === 'text') icon.style.display = 'none';
+    box.appendChild(icon);
+
+    // Name text
+    const nameSpan = document.createElement('span');
+    nameSpan.className = 'field-name-text';
+    nameSpan.textContent = f.name;
+    nameSpan.title = f.name;
+    box.appendChild(nameSpan);
+
+    const handle = document.createElement('div');
+    handle.className = 'handle';
+    box.appendChild(handle);
+
+    // Click to select, double-click to edit name
+    box.addEventListener('mousedown', e => {
+      if (state.tool !== null) return; // in drawing mode, don't select
+      e.stopPropagation();
+      state.selectedId = f.id;
+      renderList();
+      document.querySelectorAll('.field-box').forEach(b => b.classList.toggle('selected', b.dataset.id === f.id));
+
+      const vp2 = state.pageViewports[f.page];
+      const s2 = vp2.scale;
+      const isHandle = e.target.classList.contains('handle');
+      const startX = e.clientX, startY = e.clientY;
+      const orig = { x: f.x, y: f.y, w: f.w, h: f.h };
+      let moved = false;
+
+      const onMove = ev => {
+        const dx = (ev.clientX - startX) / s2;
+        const dy = (ev.clientY - startY) / s2;
+        if (Math.abs(dx) > 1 || Math.abs(dy) > 1) moved = true;
+        if (isHandle) {
+          f.w = Math.max(10, orig.w + dx);
+          f.h = Math.max(10, orig.h + dy);
+        } else {
+          f.x = orig.x + dx;
+          f.y = orig.y + dy;
+        }
+        renderFields();
+      };
+      const onUp = () => {
+        document.removeEventListener('mousemove', onMove);
+        document.removeEventListener('mouseup', onUp);
+        if (moved) pushHistory();
+      };
+      document.addEventListener('mousemove', onMove);
+      document.addEventListener('mouseup', onUp);
+    });
+
+    // Double-click to edit name inline
+    box.addEventListener('dblclick', e => {
+      e.stopPropagation();
+      e.preventDefault();
+      openInlineEditor(f, box);
+    });
+
+    overlay.appendChild(box);
+  });
+}
+
+// ─── Inline Name Editor (on PDF) ─────────────────────────────────────
+function openInlineEditor(f, box) {
+  // Remove any existing inline editor
+  const existing = document.querySelector('.inline-name-input');
+  if (existing) existing.remove();
+
+  const input = document.createElement('input');
+  input.type = 'text';
+  input.className = 'inline-name-input';
+  input.value = f.name;
+
+  const vp = state.pageViewports[f.page];
+  const s = vp.scale;
+  const pageContainer = box.closest('.page-container');
+  const containerRect = pageContainer.getBoundingClientRect();
+
+  // Position the input over the field box
+  input.style.left = (f.x * s) + 'px';
+  input.style.top = (f.y * s) + 'px';
+  input.style.width = Math.max(f.w * s, 80) + 'px';
+
+  // Insert into the overlay
+  const overlay = pageContainer.querySelector('.overlay');
+  overlay.appendChild(input);
+  input.focus();
+  input.select();
+
+  const commit = () => {
+    if (input.value && input.value !== f.name) {
+      f.name = input.value;
+      pushHistory();
+    }
+    input.remove();
+    renderFields();
+    renderList();
+  };
+
+  input.addEventListener('blur', commit);
+  input.addEventListener('keydown', e => {
+    if (e.key === 'Enter') { e.preventDefault(); input.blur(); }
+    if (e.key === 'Escape') { input.value = f.name; input.blur(); }
+    e.stopPropagation(); // prevent undo shortcut while editing
+  });
+}
+
+// ─── Click on empty area to deselect ─────────────────────────────────
+document.getElementById('main').addEventListener('mousedown', e => {
+  if (e.target.id === 'main' || e.target.classList.contains('empty-state')) {
+    state.selectedId = null;
+    document.querySelectorAll('.field-box').forEach(b => b.classList.remove('selected'));
+    renderList();
+  }
+});
+
+// ─── Sidebar Field List ──────────────────────────────────────────────
+function renderList() {
+  const list = document.getElementById('fieldList');
+  list.innerHTML = '';
+
+  const visible = state.fields.filter(f => !f.deleted);
+  const existingCount = visible.filter(f => f.origin === 'existing').length;
+  const newCount = visible.filter(f => f.origin === 'new').length;
+  document.getElementById('stats').textContent = t('statsFormat').replace('{existing}', existingCount).replace('{new}', newCount);
+
+  visible.forEach(f => {
+    const row = document.createElement('div');
+    row.className = 'field-row' + (state.selectedId === f.id ? ' selected-row' : '');
+    const typeLabel = { text: 'Text Field', checkbox: 'Check Box', radio: 'Radio Button' }[f.type];
+    const originLabel = f.origin === 'existing' ? t('existing') : t('newField');
+    const pageLabel = t('page') + (f.page + 1) + t('pageSuffix');
+
+    row.innerHTML = `
+      <div class="meta">
+        <span class="badge ${f.type}">${typeLabel}</span>
+        <span class="badge ${f.origin}">${originLabel}</span>
+        ${pageLabel}
+      </div>
+      <input type="text" value="${escapeHtml(f.name)}" data-id="${f.id}" data-key="name" placeholder="${t('fieldNamePlaceholder')}" />
+      ${f.type === 'radio' ? `<input type="text" value="${escapeHtml(f.radioGroup || '')}" data-id="${f.id}" data-key="radioGroup" placeholder="${t('radioGroupPlaceholder')}" style="margin-top:3px;" />` : ''}
+      <div class="actions">
+        <button class="del-btn" data-del="${f.id}">${t('delete')}</button>
+      </div>
+    `;
+    list.appendChild(row);
+  });
+
+  // Bind events
+  list.querySelectorAll('input').forEach(inp => {
+    inp.oninput = () => {
+      const f = state.fields.find(x => x.id === inp.dataset.id);
+      if (f) {
+        f[inp.dataset.key] = inp.value;
+        if (inp.dataset.key === 'name') renderFields();
+      }
+    };
+    inp.onchange = () => {
+      pushHistory();
+    };
+  });
+  list.querySelectorAll('.del-btn').forEach(btn => {
+    btn.onclick = () => {
+      const f = state.fields.find(x => x.id === btn.dataset.del);
+      if (!f) return;
+      if (f.origin === 'existing') {
+        f.deleted = true;
+      } else {
+        state.fields = state.fields.filter(x => x.id !== btn.dataset.del);
+      }
+      if (state.selectedId === btn.dataset.del) state.selectedId = null;
+      pushHistory();
+      renderFields();
+      renderList();
+    };
+  });
+
+  // Scroll selected into view
+  if (state.selectedId) {
+    const selectedRow = list.querySelector(`[data-id="${state.selectedId}"][data-key="name"]`);
+    if (selectedRow) selectedRow.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+  }
+}
+
+// ─── Download ─────────────────────────────────────────────────────────
+document.getElementById('downloadBtn').onclick = async () => {
+  if (!state.pdfBytes) return showToast(t('toastUploadFirst'));
+
+  const doc = await PDFLib.PDFDocument.load(state.pdfBytes);
+  const form = doc.getForm();
+  const pages = doc.getPages();
+
+  // Step 1: Remove deleted existing fields
+  const deletedExisting = state.fields.filter(f => f.origin === 'existing' && f.deleted);
+  const deletedRadioGroups = new Set();
+  deletedExisting.filter(f => f.type === 'radio').forEach(f => deletedRadioGroups.add(f.originalRadioGroup));
+
+  for (const groupName of deletedRadioGroups) {
+    const totalInGroup = state.fields.filter(
+      f => f.origin === 'existing' && f.type === 'radio' && f.originalRadioGroup === groupName
+    ).length;
+    const deletedInGroup = state.fields.filter(
+      f => f.origin === 'existing' && f.type === 'radio' && f.originalRadioGroup === groupName && f.deleted
+    ).length;
+    if (totalInGroup === deletedInGroup) {
+      try { form.removeField(groupName); } catch (e) { console.warn('removeField failed:', groupName, e); }
+    }
+  }
+  deletedExisting.filter(f => f.type !== 'radio').forEach(f => {
+    try { form.removeField(f.originalName); } catch (e) { console.warn('removeField failed:', f.originalName, e); }
+  });
+
+  // Step 2: Rename existing fields
+  const activeExisting = state.fields.filter(f => f.origin === 'existing' && !f.deleted);
+
+  const renamedRadioGroups = new Map();
+  activeExisting.filter(f => f.type === 'radio').forEach(f => {
+    if (f.radioGroup && f.originalRadioGroup && f.radioGroup !== f.originalRadioGroup) {
+      renamedRadioGroups.set(f.originalRadioGroup, f.radioGroup);
+    }
+  });
+  for (const [origGroup, newGroup] of renamedRadioGroups) {
+    try {
+      const field = form.getField(origGroup);
+      if (field) field.acroField.setPartialName(newGroup);
+    } catch (e) { console.warn('rename radio group failed:', origGroup, e); }
+  }
+
+  activeExisting.filter(f => f.type !== 'radio').forEach(f => {
+    if (f.name !== f.originalName) {
+      try {
+        const field = form.getField(f.originalName);
+        if (field) field.acroField.setPartialName(f.name);
+      } catch (e) { console.warn('rename failed:', f.originalName, e); }
+    }
+  });
+
+  // Step 3: Move/resize existing fields
+  activeExisting.forEach(f => {
+    if (f.originalX === null) return;
+    if (f.x !== f.originalX || f.y !== f.originalY || f.w !== f.originalW || f.h !== f.originalH) {
+      try {
+        const lookupName = f.type === 'radio' ? f.originalRadioGroup : f.originalName;
+        const field = form.getField(lookupName);
+        if (!field) return;
+        const widgets = field.acroField.getWidgets();
+        const wIdx = f.widgetIndex || 0;
+        if (widgets[wIdx]) {
+          const pageHeight = pages[f.page].getHeight();
+          widgets[wIdx].setRectangle(PDFLib.PDFRectangle.of(
+            f.x,
+            pageHeight - f.y - f.h,
+            f.x + f.w,
+            pageHeight - f.y
+          ));
+        }
+      } catch (e) { console.warn('move/resize failed:', f.name, e); }
+    }
+  });
+
+  // Step 4: Create new fields (allow duplicate names)
+  // Strategy: create each field with a unique internal name first (to keep pdf-lib happy),
+  // then rename to the user's desired name after creation. This avoids pdf-lib's
+  // name-conflict recursion while producing same-named fields in the output PDF.
+  const newFields = state.fields.filter(f => f.origin === 'new');
+  const renameQueue = []; // { field, desiredName }
+
+  // Text fields
+  newFields.filter(f => f.type === 'text').forEach(f => {
+    const page = pages[f.page];
+    const ph = page.getHeight();
+    const internalName = uniqueName(form, f.name);
+    const tf = form.createTextField(internalName);
+    tf.addToPage(page, { x: f.x, y: ph - f.y - f.h, width: f.w, height: f.h, borderWidth: 1 });
+    renameQueue.push({ field: tf, desiredName: f.name });
+  });
+
+  // Checkboxes
+  newFields.filter(f => f.type === 'checkbox').forEach(f => {
+    const page = pages[f.page];
+    const ph = page.getHeight();
+    const internalName = uniqueName(form, f.name);
+    const cb = form.createCheckBox(internalName);
+    cb.addToPage(page, { x: f.x, y: ph - f.y - f.h, width: f.w, height: f.h });
+    renameQueue.push({ field: cb, desiredName: f.name });
+  });
+
+  // Radio groups
+  const newRadioGroups = {};
+  newFields.filter(f => f.type === 'radio').forEach(f => {
+    const g = f.radioGroup || 'group1';
+    (newRadioGroups[g] = newRadioGroups[g] || []).push(f);
+  });
+  for (const [groupName, items] of Object.entries(newRadioGroups)) {
+    const internalGroupName = uniqueName(form, groupName);
+    const rg = form.createRadioGroup(internalGroupName);
+    items.forEach((f, idx) => {
+      const page = pages[f.page];
+      const ph = page.getHeight();
+      const optionName = f.name.replace(/[^A-Za-z0-9_]/g, '_') || `opt${idx + 1}`;
+      rg.addOptionToPage(optionName, page, { x: f.x, y: ph - f.y - f.h, width: f.w, height: f.h });
+    });
+    renameQueue.push({ field: rg, desiredName: groupName });
+  }
+
+  // Step 4.5: Rename all new fields to their desired names (allowing duplicates)
+  renameQueue.forEach(({ field, desiredName }) => {
+    field.acroField.setPartialName(desiredName);
+  });
+
+  // Step 5: Save and download
+  const bytes = await doc.save();
+  const blob = new Blob([bytes], { type: 'application/pdf' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `edited_${new Date().toISOString().slice(0, 10)}.pdf`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+  showToast(t('toastDownloaded'));
+};
+
+function uniqueName(form, base) {
+  let name = base || 'field';
+  let n = 1;
+  while (form.getFields().some(f => f.getName() === name)) {
+    name = `${base}_${n++}`;
+  }
+  return name;
+}
+
+// ─── Utilities ────────────────────────────────────────────────────────
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+
+function showToast(msg) {
+  const toast = document.getElementById('toast');
+  toast.textContent = msg;
+  toast.classList.add('show');
+  setTimeout(() => toast.classList.remove('show'), 2000);
+}
+</script>
+</body>
+</html>
